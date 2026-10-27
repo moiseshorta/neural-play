@@ -1,0 +1,17 @@
+#N canvas 40 60 900 420 12;
+#X obj 0 0 cnv 1 900 46 empty empty nn.scope~\ \ -\ \ tiny\ oscilloscope 14 23 0 20 #1d3557 #ffffff 0;
+#X text 20 56 Draws a stretch of the incoming signal. Arguments: number of samples (default 1024) \, vertical range (default 1). "hold" freezes it., f 120;
+#X obj 20 110 osc~ 440;
+#X obj 20 140 nn.scope~;
+#X obj 300 110 osc~ 2;
+#X obj 300 136 *~ 4;
+#X obj 300 170 nn.scope~ 48000 4;
+#X text 20 270 1024 samples of 440 Hz, f 30;
+#X text 300 280 one second of a 2 Hz LFO with range 4, f 30;
+#X msg 20 320 \; pd dsp 1;
+#X msg 110 320 \; pd dsp 0;
+#X text 200 320 <- audio on / off, f 18;
+#X text 20 380 neuralplay - Moisés Horta Valenzuela / SEMILLA.AI Studio - open lessons/ and 00-START-HERE.pd for the full course, f 120;
+#X connect 2 0 3 0;
+#X connect 4 0 5 0;
+#X connect 5 0 6 0;

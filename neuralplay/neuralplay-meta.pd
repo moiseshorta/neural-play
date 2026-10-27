@@ -1,0 +1,8 @@
+#N canvas 40 60 560 260 12;
+#X text 10 10 META this is a prototype of a libdir meta file, f 70;
+#X text 10 36 NAME neuralplay, f 70;
+#X text 10 62 AUTHOR Moisés Horta Valenzuela / SEMILLA.AI Studio, f 70;
+#X text 10 88 DESCRIPTION neural network playground for music technology students, f 70;
+#X text 10 114 LICENSE BSD-3-Clause, f 70;
+#X text 10 140 VERSION 0.1.0, f 70;
+#X text 10 166 REQUIRES Pd vanilla 0.54 or newer (no externals), f 70;

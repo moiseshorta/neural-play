@@ -1,0 +1,9 @@
+#N canvas 0 50 300 120 12;
+#X text 10 10 test helper: switch audio on and quit after one second, f 40;
+#X obj 10 50 loadbang;
+#X msg 10 80 \; pd dsp 1;
+#X obj 120 50 delay 1000;
+#X msg 120 80 \; pd quit;
+#X connect 1 0 2 0;
+#X connect 1 0 3 0;
+#X connect 3 0 4 0;

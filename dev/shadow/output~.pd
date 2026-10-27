@@ -1,0 +1,8 @@
+#N canvas 0 50 450 300 12;
+#X text 20 10 TEST STAND-IN for vanilla [output~]: used only by dev/check.py (found first via -path). Sends the lesson's audio to [catch~ nntest-L/R] instead of the sound card \, ignoring volume., f 50;
+#X obj 20 90 inlet~ fwd;
+#X obj 180 90 inlet~;
+#X obj 20 130 throw~ nntest-L;
+#X obj 180 130 throw~ nntest-R;
+#X connect 1 0 3 0;
+#X connect 2 0 4 0;
