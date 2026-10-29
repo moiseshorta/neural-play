@@ -4,8 +4,8 @@
 by **Moisés Horta Valenzuela / SEMILLA.AI Studio**
 
 Build, hear and understand neural networks inside Pd — from the 1943 logic neuron to VAEs,
-GANs, transformers and diffusion — and wire them into circuits that control synthesis and
-feedback systems. Sixteen commented lessons, a small library of neuron objects, examples and
+GANs, transformers, diffusion and reinforcement learning — and wire them into circuits that control
+synthesis and feedback systems. Seventeen commented lessons, a small library of neuron objects, examples and
 self-checking exercises, written for music technology students.
 Vanilla **Pd 0.54 or newer**, no externals.
 
@@ -25,8 +25,11 @@ Vanilla **Pd 0.54 or newer**, no externals.
 | II · Networks as instruments | 08 MLP mapping · 09 recurrent CTRNN oscillators · 10 spiking neurons (LIF, Izhikevich) |
 | III · Modern generative models | 11 autoencoder / VAE · 12 GAN · 13 attention · 14 transformer induction head · 15 diffusion |
 | IV · Circuits | 16 the neural feedback synth (a 27-neuron reservoir) |
+| V · Learning from reward | 17 reinforcement learning: Q-learning, a melody that learns from reward |
 
-Plus examples (a ring-oscillator drone, a spiking drum machine), exercises with a CHECK
+Plus examples (a ring-oscillator drone, a spiking drum machine, the GAN gesture space: FM
+gestures and granular clouds on your own sound, learned by a GAN whose latent space you walk, and the
+applause drummer: reinforcement learning from your claps), exercises with a CHECK
 button, and the `nn.*` library (`[nn.neuron~]`, `[nn.act~]`, `[nn.izh~]`, `[nn.dense]`,
 `[nn.softmax]`, …). What each lesson teaches and sounds like: [neuralplay/README.md](neuralplay/README.md).
 
@@ -36,7 +39,7 @@ button, and the `nn.*` library (`[nn.neuron~]`, `[nn.act~]`, `[nn.izh~]`, `[nn.d
 neuralplay/              the Pd package - this folder is what deken ships
   00-START-HERE.pd       start page: lessons, library, history, examples/exercises browser
   nn.*.pd                the library, each with an nn.*-help.pd
-  lessons/               the 16 lessons (data/ holds the trained VAE weights)
+  lessons/               the 17 lessons (data/ holds the trained VAE weights)
   examples/              finished instruments - listed on the start page automatically
   exercises/             tasks with a self-check - listed on the start page automatically
   templates/             lesson-template.pd: copy it to start a new patch
@@ -60,7 +63,9 @@ PD=/usr/bin/pd python3 dev/check.py  # Pd somewhere else than the macOS default
 Pd runs headless and faster than real time; the audio of every lesson is recorded and
 compared with independent Python references — the perceptron learns AND/OR/NAND in the same
 epochs as a Python perceptron, the CTRNN oscillates at the simulated frequencies, the Pd VAE
-matches numpy, the induction head continues melodies exactly like the reference. New
+matches numpy, the induction head continues melodies exactly like the reference, one GAN training
+step in Pd equals the numpy step to float precision, every move of the Q-learning lesson and every
+hit and clap of the applause drummer is replayed in numpy. New
 examples, exercises and templates are tested automatically.
 
 ## Extending it

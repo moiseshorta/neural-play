@@ -58,10 +58,10 @@ fails at every edge.
 ## Adding a lesson
 
 1. Save it as `neuralplay/lessons/NN-<topic>.pd`.
-2. Add it to the start page. In `00-START-HERE.pd` duplicate the button of lesson 16 and its
-   description, set the copy's label to the file name and its send-symbol to `$0-open16`
+2. Add it to the start page. In `00-START-HERE.pd` duplicate the button of lesson 17 and its
+   description, set the copy's label to the file name and its send-symbol to `$0-open17`
    (lesson *k* sends to `$0-open<k-1>`). Open `[pd open-a-lesson]`, duplicate
-   `[r $0-open15]` and the message under it, change them to `[r $0-open16]` and
+   `[r $0-open16]` and the message under it, change them to `[r $0-open17]` and
    `[NN-<topic>.pd(`, and connect the message to `[t a b]` like the others.
    (Quicker, from any patch: a message box `[; neuralplay-open NN-<topic>.pd(`.)
 3. Add a row to the lessons table in `neuralplay/README.md` and the root `README.md`.
@@ -138,8 +138,23 @@ The package is pure Pd, so one upload works on every platform.
 - **`[expr]`**: `random()` returns an integer (use `float(random(0, 1000)) / 1000`), `^` is
   bitwise XOR (use `pow()`), several expressions separated by `;` output right to left.
 - **`$0` in message boxes**: don't rely on it; send through `[s $0-name]` objects.
+- **A number into `[v name]` overwrites it.** To read a value, send a bang (`[t b]` first).
+- **Array writes inside `[expr]` are slow** (each access looks the array up by name). In long loops accumulate
+  in a `[value]`, as `[nn.dense]` does: about 0.12 instead of 0.32 microseconds per multiply-add.
+- **`[expr a; b]` evaluates right to left**: `b` runs first, so an assignment on the right is visible on the left.
+- **`[expr]` assigns to `[value]`s** (`[expr x_$0 = 5]`), but only to one that exists: put a `[v x_$0]` somewhere
+  first, or it says `no such var` (lesson 17 keeps them all in `[pd values]`).
+- **`[route]` hands on a bare word as a selector**, not a symbol: put `[symbol]` after it before `[makefilename]`.
+- **A `[metro]`'s next tick is already scheduled**: a new interval only applies after it (a cloud that started at
+  2000 ms stayed silent for 2 s). For rates that change, count a phase every few ms instead (see the clouds in
+  `examples/gan-gesture-space.pd`).
+- **Writing an empty `[text]` empties the file**: Pd truncates it to 0 bytes (and prints `write failed`). Check
+  that something is kept before writing (the GAN examples refuse an empty set).
+- **Integer division in `[expr]`**: `(17 % 5) / 4` is 0 when both sides are integers - use `float()`.
 - **Identical neurons stay identical.** A symmetric network that starts from equal states
   never leaves them — add a whisper of `[noise~]` (see the ring-oscillator example).
+- **Array plot style in the file**: in `#X array name n float flags`, flags 0 draws a polygon, 2 draws points
+  (one flat bar per value), +8 hides the name. Send `width 3, color 249` to the array's name at load to style it.
 - **GUI details**: a number box with a receive name has no inlet; number-box labels cannot
   contain spaces; a slider's saved start value snaps to whole pixels (150 becomes 150.141);
   array graphs do not clip, so values outside the range draw outside the box.

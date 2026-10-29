@@ -43,7 +43,9 @@ DRIVERS = {   # messages sent 0.5 s after opening, so the screenshot shows the l
     '01-mcculloch-pitts': 'l01-play 1', '04-perceptron': 'l04-gate OR; l04-speed 120; l04-train 1',
     '06-backprop': 'l06-steps 3; l06-train 1', '07-hopfield-memory': 'l07-cue B; l07-corrupt bang; l07-rate 4; l07-recall 1',
     '08-mlp-mapping': 'l08-explore 1', '12-gan': 'l12-steps 40; l12-train 1', '14-transformer-induction': 'l14-gen 1',
-    '15-diffusion': 'l15-go bang'}
+    '15-diffusion': 'l15-go bang', 'gan-gesture-space': 'exvg-demo bang; exvg-pick 2; exvg-train 1',
+    'vae-feedback-gan-presets': 'exvg-demo bang; exvg-train 1', '17-reinforcement-learning': 'l17-practice 12; l17-speed 6; l17-play 1',
+    'rl-applause-drummer': 'exrl-practice 14; exrl-clap bang'}
 
 
 def shoot_package(pkg, out_dir, wait=7.0, only=()):
