@@ -58,10 +58,10 @@ fails at every edge.
 ## Adding a lesson
 
 1. Save it as `neuralplay/lessons/NN-<topic>.pd`.
-2. Add it to the start page. In `00-START-HERE.pd` duplicate the button of lesson 17 and its
-   description, set the copy's label to the file name and its send-symbol to `$0-open17`
+2. Add it to the start page. In `00-START-HERE.pd` duplicate the button of lesson 22 and its
+   description, set the copy's label to the file name and its send-symbol to `$0-open22`
    (lesson *k* sends to `$0-open<k-1>`). Open `[pd open-a-lesson]`, duplicate
-   `[r $0-open16]` and the message under it, change them to `[r $0-open17]` and
+   `[r $0-open21]` and the message under it, change them to `[r $0-open22]` and
    `[NN-<topic>.pd(`, and connect the message to `[t a b]` like the others.
    (Quicker, from any patch: a message box `[; neuralplay-open NN-<topic>.pd(`.)
 3. Add a row to the lessons table in `neuralplay/README.md` and the root `README.md`.
@@ -76,9 +76,9 @@ the signal *before* the volume. A check is a function that raises on failure and
 one-line summary:
 
 ```python
-def check_l17():
-    # open the lesson, record 5 s, and at 10 ms send "1" to the receive name l17-play
-    x, log = render('lessons/17-your-topic.pd', 5.0, [(10, 'l17-play 1')])
+def check_l23():
+    # open the lesson, record 5 s, and at 10 ms send "1" to the receive name l23-play
+    x, log = render('lessons/23-your-topic.pd', 5.0, [(10, 'l23-play 1')])
     assert not errors_in(log), errors_in(log)[:3]          # no Pd errors in the console
     s = stats(x)                                            # rms, peak, dc, finite
     assert s['finite'] and s['rms'] > 0.01, s
@@ -87,12 +87,12 @@ def check_l17():
     return f'plays 220 Hz (rms {s["rms"]:.3f})'
 ```
 
-Add it to the `CHECKS` list at the bottom with a name (`('lesson 17 your topic', check_l17)`).
+Add it to the `CHECKS` list at the bottom with a name (`('lesson 23 your topic', check_l23)`).
 Values printed with `[print tag]` come back with `printed(log, 'tag')`. Measure what the lesson
 claims against an independent Python reference whenever there is one (see `check_l04`,
 `check_l06`, `check_l11`).
 
-Run one check: `python3 dev/check.py "lesson 17"`. Run all before every commit.
+Run one check: `python3 dev/check.py "lesson 23"`. Run all before every commit.
 
 ## Adding a library object
 
@@ -151,6 +151,21 @@ The package is pure Pd, so one upload works on every platform.
 - **Writing an empty `[text]` empties the file**: Pd truncates it to 0 bytes (and prints `write failed`). Check
   that something is kept before writing (the GAN examples refuse an empty set).
 - **Integer division in `[expr]`**: `(17 % 5) / 4` is 0 when both sides are integers - use `float()`.
+- **`[expr]` gets its numbers with 6 significant digits.** Pd hands it atoms, and floats are printed with `%g`:
+  16711680 arrives as 16711700 (a colour turned yellow), 1000001 as 1e+06. Write big constants as products
+  (`255 * 65536`). Comments show big numbers rounded the same way.
+- **`[fexpr~]` is a per-sample recursion**: `$y1[-1]` is output 1 one sample ago, `$x1[-8]` the input 8 samples
+  ago, and several expressions can read each other's past outputs (four feedback neurons in one object in lesson
+  21, an 8-weight LMS neuron in lesson 22). `set a b c` sets the last outputs, a known start state. It reads
+  `[value]`s and arrays (each access looks them up by name).
+- **Downsampling a subpatch**: `[block~ 64 1 0.125]` runs it at 1/8 of the sample rate (lesson 22). `[inlet~]` and
+  `[outlet~]` resample (`[outlet~ lin]` interpolates); `[s~]`/`[r~]` do not cross rates.
+- **float32 near an integer boundary**: a value that numpy and Pd compute in different precision can truncate
+  (`int()`) or compare differently right at a boundary. Keep schedules that are truncated or compared integer
+  (the shrinking radius of lesson 18).
+- **Moving GUI objects**: a `[cnv]` takes `pos x y` and `vis_size w h` (the bars and markers of lessons 18 to 22);
+  objects created later are drawn on top. `[send]` without an argument takes its destination in the right inlet,
+  so `[makefilename $0-dot%d]` -> right inlet addresses many GUIs from one loop.
 - **Identical neurons stay identical.** A symmetric network that starts from equal states
   never leaves them — add a whisper of `[noise~]` (see the ring-oscillator example).
 - **Array plot style in the file**: in `#X array name n float flags`, flags 0 draws a polygon, 2 draws points

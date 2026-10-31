@@ -2,9 +2,9 @@
 
 **by Moisés Horta Valenzuela / SEMILLA.AI Studio**
 
-Build, hear and understand neural networks — from the 1943 logic neuron to VAEs,
-GANs, transformers, diffusion and reinforcement learning — and use them to control synthesis
-and feedback systems. Seventeen commented lessons plus a small library of neuron objects, written
+Build, hear and understand neural networks — from the 1943 logic neuron to self-organizing maps,
+genetic algorithms, VAEs, GANs, transformers, diffusion and reinforcement learning — and use them to
+control synthesis and feedback systems. Twenty-two commented lessons plus a small library of neuron objects, written
 for music technology students. Everything is **vanilla Pd (0.54 or newer)**, no externals.
 
 ![start page](screenshots/00-START-HERE.jpg)
@@ -40,10 +40,41 @@ To use the objects in your own patches: `[declare -path neuralplay]`.
 | 15 | Diffusion | denoising step by step | a noise cloud condenses into a chord |
 | 16 | Capstone: feedback reservoir | a 27-neuron network with feedback drives a synth | the NeuralNetwork-VAE-Dense instrument, rebuilt |
 | 17 | Reinforcement learning (1989) | learning from reward: Q-learning, explore or exploit, credit travels back in time | a wandering melody learns its way home to the goal note; you can reward it too |
+| 18 | Self-organizing map (1982) | competition plus neighbours: a map that orders itself (Kohonen) | 36 FM voices on a map you walk like a keyboard |
+| 19 | Energy and annealing (1983–85) | a Hopfield–Tank network solves a puzzle by lowering an energy; noise that cools slowly finds deeper valleys | twelve-tone rows that freeze into shape as the temperature drops |
+| 20 | Radial basis functions (1988–89) | normalised Gaussian bumps; the delta rule turns a blend into exact interpolation | morphing between six synth presets on a pad |
+| 21 | Genetic algorithms (1975) | selection, crossover and mutation of weights and biases — your ear is the fitness | eight feedback-neuron synths you breed by rating them |
+| 22 | Linear prediction (1960 / 1970) | one linear neuron guesses the next sample (normalised LMS) = LPC | the prediction error (a whitened sound) and LPC cross-synthesis |
 
 ![perceptron](screenshots/04-perceptron.jpg)
 ![latent space](screenshots/11-autoencoder-vae.jpg)
 ![diffusion](screenshots/15-diffusion.jpg)
+
+### Other ways to learn: lessons 18 to 22
+
+Five lessons follow Raúl Rojas' *Neural Networks — A Systematic Introduction* (Springer 1996) beyond backpropagation:
+
+- **18 · Self-organizing map (Kohonen 1982).** 36 neurons on a 6 × 6 grid compete for points drawn from a shape; the
+  winner and its grid neighbours move towards each point while the radius shrinks. The map unfolds over the shape and
+  keeps its order — walk it like a keyboard of FM sounds. With radius 0 it is a plain codebook and the order is lost
+  (Rojas ch. 15).
+- **19 · Energy and annealing (Kirkpatrick 1983, Hopfield & Tank 1985).** 144 units on a piano roll; the rules (each
+  pitch once, one pitch per step) and a taste for intervals become one energy. A Boltzmann machine at temperature T
+  samples it: cooling slowly finds smoother twelve-tone rows, quenching freezes the first valid one (Rojas ch. 13–14).
+- **20 · Radial basis functions (Broomhead & Lowe 1988, Moody & Darken 1989).** Six presets of a six-parameter synth
+  sit on a pad as Gaussian bumps; the normalised hidden layer says how much of each you hear. The delta rule trains
+  the output weights until every preset comes out exactly — and shows why wide bumps make that ill-conditioned
+  (Rojas 16.2.5).
+- **21 · Genetic algorithms (Holland 1975).** Eight feedback synths — four CTRNN neurons each, computed sample by
+  sample — form a population. You rate them by ear; roulette-wheel selection, crossover between neurons and Gaussian
+  mutation breed the next generation from your favourites (Rojas ch. 17).
+- **22 · Linear prediction (Widrow & Hoff 1960).** One linear neuron with 8 inputs guesses the next sample and learns
+  from every mistake (normalised LMS, at 1/8 of the sample rate like telephone LPC). Its error is the sound with its
+  resonances removed; turned around, the learned filter sings on a buzz (cross-synthesis) (Rojas 9.3.4 and 8.1).
+
+![self-organizing map](screenshots/18-self-organizing-map.jpg)
+![genetic algorithms](screenshots/21-genetic-algorithms.jpg)
+![linear prediction](screenshots/22-linear-prediction.jpg)
 
 ## The library
 
@@ -151,7 +182,12 @@ playback are exact, and a grain read from a test chirp sounds at the frequency i
 exactly its density. Lesson 17 and the applause drummer are replayed in numpy: every traced move (the world,
 the epsilon-greedy choice, the update) and every 16th note and clap (the probabilities, the dancer's reward, the
 weights and the memory) match to float precision, the learned values equal value iteration, and the drummer
-ends up playing the dancer's taste in all 64 cells. The test tools (`dev/check.py`,
+ends up playing the dancer's taste in all 64 cells. Lessons 18 to 22 are replayed step by step: every traced
+Kohonen update, every Boltzmann decision (its net input equals the energy difference computed from the energy
+formula), the RBF hidden layer and every round of the delta rule, every child of the genetic algorithm (parents,
+cut, mutations) and every sample of the LMS neuron (power, guess, weight update) match numpy; the exact RBF fit
+reaches solve(PHI, F), the parents are drawn in proportion to their ratings over 40 generations, and the LPC neuron
+comes within a few tenths of a dB of the least-squares predictor and finds the formants of the vowel. The test tools (`dev/check.py`,
 `dev/shoot.py`) live in the source repository next to this package and are not needed to use it.
 
 ## Publishing on deken (maintainers)

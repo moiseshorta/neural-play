@@ -525,6 +525,404 @@ def check_l17():
             f'gamma 0 values {np.round(V0, 2).tolist()}; plays (rms {s["rms"]:.3f})')
 
 
+L18 = 'lessons/18-self-organizing-map.pd'
+L18_SHAPES = [((0, 0, 1, 1), (0, 0, 0, 0)), ((0.05, 0.55, 0.35, 0.35), (0.6, 0.05, 0.35, 0.35)),
+              ((0.35, 0.05, 0.3, 0.9), (0.05, 0.35, 0.9, 0.3)), ((0.0, 0.49, 1.0, 0.02), (0, 0, 0, 0))]
+
+
+def l18_run(events, seconds=0.5):
+    x, log = render(L18, seconds, events)
+    assert not errors_in(log), errors_in(log)[:3]
+    arr = lambda tag: [np.array(list(map(float, l.split()[1:]))) for l in log.splitlines() if l.startswith(tag + ':')]
+    steps = np.array([list(map(float, l.split()[1:])) for l in log.splitlines() if l.startswith('l18-step:')])
+    return x, log, arr, steps
+
+
+def som_replay(w, gi, gj, steps, shape):
+    """Kohonen learning in numpy on the traced examples: winner = nearest unit, square neighbourhood on the grid"""
+    (ax, ay, aw, ah), (bx, by, bw, bh) = L18_SHAPES[shape]
+    inside = lambda x, y, X, Y, W, H: X <= x <= X + W and Y <= y <= Y + H
+    w = w.copy(); bad = 0
+    for xi, yi, k, eta, rad in steps:
+        assert inside(xi, yi, ax, ay, aw, ah) or inside(xi, yi, bx, by, bw, bh), ('example outside the shape', xi, yi)
+        d = (w[:, 0] - xi) ** 2 + (w[:, 1] - yi) ** 2; k = int(k)
+        assert d[k] <= d.min() + 1e-6, ('winner is not the nearest unit', k, d.argmin())
+        phi = np.maximum(np.abs(gi - gi[k]), np.abs(gj - gj[k])) <= rad
+        w += eta * phi[:, None] * (np.array([xi, yi]) - w)
+    return w
+
+
+def topographic_error(w, gi, gj, shape, n=4000, seed=3):
+    rng = np.random.default_rng(seed); (a, b) = L18_SHAPES[shape]; pa = a[2] * a[3] / (a[2] * a[3] + b[2] * b[3]); bad = 0
+    for _ in range(n):
+        X, Y, W, H = a if rng.random() < pa else b
+        p = np.array([X + W * rng.random(), Y + H * rng.random()])
+        i, j = np.argsort(((w - p) ** 2).sum(1))[:2]
+        bad += max(abs(gi[i] - gi[j]), abs(gj[i] - gj[j])) > 1
+    return bad / n
+
+
+def check_l18():
+    out = []
+    # 1) a full annealed run on the square, traced: every step = numpy, the schedule is Rojas' (eta down to 0.01, radius to 0)
+    N = 1500
+    x, log, arr, st = l18_run([(10, 'l18-dump bang'), (20, 'l18-trace 1'), (30, f'l18-train {N}'), (40, 'l18-trace 0'), (50, 'l18-dump bang')])
+    w0 = np.stack([arr('l18-wx')[0], arr('l18-wy')[0]], 1); gi, gj = arr('l18-gi')[0], arr('l18-gj')[0]
+    w1 = np.stack([arr('l18-wx')[1], arr('l18-wy')[1]], 1)
+    assert len(st) == N, len(st)
+    t = np.arange(N); eta_want = 0.5 * (0.01 / 0.5) ** (t / N); rad_want = np.maximum(0, np.floor(6 * (1 - t / (0.7 * N))))
+    off = np.abs(st[:, 4] - rad_want)
+    assert np.abs(st[:, 3] - eta_want).max() < 1e-4 and off.max() <= 1 and (off > 0).sum() <= 5, 'schedule'
+    w = som_replay(w0, gi, gj, st, 0)
+    err = np.abs(w - w1).max()
+    assert err < 1e-4, err
+    te_grid = topographic_error(w1, gi, gj, 0)
+    q = printed(log, 'l18-quality')
+    out.append(f'{N} traced steps = numpy Kohonen learning (weights within {err:.0e}), schedule as specified')
+    # 2) ordered map vs codebook: grid with radius 6 orders itself, radius 0 does not
+    x, log, arr, _ = l18_run([(10, 'l18-radius 0'), (20, 'l18-train 3000'), (30, 'l18-dump bang')])
+    wc = np.stack([arr('l18-wx')[-1], arr('l18-wy')[-1]], 1)
+    te_code = topographic_error(wc, gi, gj, 0)
+    assert te_grid < 0.05 and te_code > 0.5, (te_grid, te_code)
+    out.append(f'topographic error: map {100 * te_grid:.1f}%, codebook (radius 0) {100 * te_code:.0f}%')
+    # 3) the chain on a line orders itself (Cottrell & Fort) and spreads along it
+    x, log, arr, _ = l18_run([(10, 'l18-topology 0'), (20, 'l18-shape 3'), (30, 'l18-train 6000'), (40, 'l18-dump bang')], 1.0)
+    wx, gc = arr('l18-wx')[-1], arr('l18-gi')[-1]
+    xs = wx[np.argsort(gc)]
+    mono = np.all(np.diff(xs) > 0) or np.all(np.diff(xs) < 0)
+    spread = np.abs(np.sort(wx) - (2 * np.arange(1, 37) - 1) / 72).max()
+    assert mono and spread < 1.5 / 36, (mono, spread)
+    out.append(f'a chain on a line orders itself and spreads evenly (within {spread * 36:.2f} unit spacings of (2i-1)/2n, Rojas eq. 15.1)')
+    # 4) the probe finds the nearest unit, and the patch plays
+    x, log, arr, _ = l18_run([(10, 'l18-train 1500'), (20, 'l18-trace 1'), (30, 'l18-probe-x 0.2'), (40, 'l18-probe-y 0.8'), (50, 'l18-dump bang'), (60, 'l18-walk 1')], 2.0)
+    pk = int(printed(log, 'l18-probe')[-1]); wp = np.stack([arr('l18-wx')[-1], arr('l18-wy')[-1]], 1)
+    assert pk == int(np.argmin(((wp - [0.2, 0.8]) ** 2).sum(1))), pk
+    s = stats(x)
+    assert s['finite'] and s['rms'] > 0.005, s
+    out.append(f'the probe picks the nearest unit; walking the map plays (rms {s["rms"]:.3f})')
+    return '; '.join(out)
+
+
+L19 = 'lessons/19-energy-and-annealing.pd'
+L19_COST = [0, 1.0, 0.6, 0.3, 0.3, 0.1, 0.8]            # the consonant taste, by interval class
+
+
+def l19_cpq(cost=L19_COST):
+    return np.array([[cost[min((p - q) % 12, (q - p) % 12)] for q in range(12)] for p in range(12)])
+
+
+def l19_energy(x, A, D, C):
+    """the energy written directly from its definition (not from the weights): rules + taste of a cyclic row"""
+    rules = ((x.sum(1) - 1) ** 2).sum() + ((x.sum(0) - 1) ** 2).sum()
+    taste = sum(C[p, q] * x[p, k] * x[q, (k + 1) % 12] for k in range(12) for p in range(12) for q in range(12))
+    return A * rules + D * taste
+
+
+def l19_best(C):
+    """exact cheapest cyclic row (Held-Karp dynamic programming over subsets)"""
+    n = 12; best = {(1, 0): 0.0}
+    for size in range(2, n + 1):
+        nxt = {}
+        for (S, j), v in best.items():
+            for k in range(n):
+                if not S >> k & 1:
+                    key = (S | 1 << k, k); nv = v + C[j, k]
+                    if nv < nxt.get(key, 1e9): nxt[key] = nv
+        best = nxt
+    return min(v + C[j, 0] for (S, j), v in best.items())
+
+
+def l19_run(events, seconds=0.5):
+    x, log = render(L19, seconds, events)
+    assert not errors_in(log), errors_in(log)[:3]
+    ups = np.array([list(map(float, l.split()[1:])) for l in log.splitlines() if l.startswith('l19-update:')])
+    xs = [np.array(list(map(float, l.split()[1:]))).reshape(12, 12) for l in log.splitlines() if l.startswith('l19-x:')]
+    en = [list(map(float, l.split()[1:])) for l in log.splitlines() if l.startswith('l19-energy:')]
+    return x, log, ups, xs, en
+
+
+def l19_replay(ups, A, D, C, x0):
+    """every update: h = E(unit off) - E(unit on) from the energy itself; then follow the printed decision"""
+    x = x0.copy(); worst = 0.0; dev = var = 0.0; det = 0
+    for u, h, pr, nw, T in ups:
+        p, k = divmod(int(u), 12)
+        off, on = x.copy(), x.copy(); off[p, k] = 0; on[p, k] = 1
+        worst = max(worst, abs(l19_energy(off, A, D, C) - l19_energy(on, A, D, C) - h), abs(pr - 1 / (1 + np.exp(-h / T))))
+        dev += nw - pr; var += pr * (1 - pr)
+        det += T < 0.02 and abs(h) > 0.05 and nw != (h > 0)
+        x[p, k] = nw
+    return x, worst, dev / np.sqrt(max(var, 1e-9)), det
+
+
+def check_l19():
+    A, D, C = 0.6, 1.0, l19_cpq()
+    # 1) 20 sweeps at T = 0.5 traced: every net input is the energy difference, every decision follows 1 / (1 + exp(-h / T))
+    x, log, ups, xs, en = l19_run([(10, 'l19-play 0'), (20, 'l19-temp 0.5'), (30, 'l19-trace 1'), (40, 'l19-sweeps 20'), (50, 'l19-trace 0'), (60, 'l19-print bang')])
+    assert len(ups) == 20 * 144, len(ups)
+    xr, worst, z, _ = l19_replay(ups, A, D, C, np.zeros((12, 12)))
+    assert worst < 1e-4 and abs(z) < 4 and np.array_equal(xr, xs[-1]), (worst, z)
+    out = [f'{len(ups)} traced updates: net input = E(off) - E(on) from the energy formula and P(on) = 1/(1+exp(-h/T)) within {worst:.0e}, decisions follow it (z = {z:+.2f})']
+    # 2) an annealing run (40 sweeps, T 2 -> 0.02) ends in a valid row; at the coldest steps it acts like a Hopfield net (on iff h > 0)
+    x, log, ups, xs, en = l19_run([(10, 'l19-play 0'), (30, 'l19-trace 1'), (40, 'l19-anneal-fast 40'), (50, 'l19-trace 0'), (60, 'l19-print bang')])
+    xr, worst, z, det = l19_replay(ups, A, D, C, np.zeros((12, 12)))
+    xf = xs[-1]; valid = np.all(xf.sum(0) == 1) and np.all(xf.sum(1) == 1)
+    seq = [int(np.argmax(xf[:, k])) for k in range(12)]
+    cost = sum(C[seq[k], seq[(k + 1) % 12]] for k in range(12)); best = l19_best(C)
+    assert worst < 1e-4 and det == 0 and valid and abs(cost - en[-1][1]) < 1e-4 and en[-1][0] == 0, (worst, det, valid, cost, en)
+    names = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+    out.append(f'annealing finds a valid row ({" ".join(names[p] for p in seq)}), taste cost {cost:.1f} vs the exact optimum {best:.1f} (dynamic programming)')
+    # 3) it plays
+    x, log, _, _, _ = l19_run([(10, 'l19-anneal-fast 40')], 3.0)
+    s = stats(x)
+    assert s['finite'] and s['rms'] > 0.005, s
+    out.append(f'plays the row (rms {s["rms"]:.3f})')
+    return '; '.join(out)
+
+
+L20 = 'lessons/20-radial-basis-functions.pd'
+L20_C = np.array([[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85], [0.5, 0.5], [0.5, 0.88]])
+L20_F = np.array([[0.2, 0.14, 0.1, 0.35, 0, 0], [0.45, 0.78, 0.7, 0.85, 0, 0.05], [0.7, 0.14, 0.12, 0.7, 0.3, 0.7],
+                  [0.3, 0.14, 0.9, 1, 0.75, 0], [0.85, 0.43, 0.3, 0.9, 0.08, 0.1], [0.4, 0.29, 0.5, 0.5, 0.35, 0.2]])
+
+
+def l20_rbf(C, width):
+    """Moody-Darken normalised Gaussians, sigma_j = width x distance to the nearest other centre (Rojas 16.2.5)"""
+    d = np.sqrt(((C[:, None] - C[None]) ** 2).sum(-1)); np.fill_diagonal(d, 9)
+    s = width * np.maximum(0.02, d.min(1))
+    def g(x):
+        q = ((np.asarray(x) - C) ** 2).sum(1) / (2 * s ** 2); e = np.exp(q.min() - q); return e / e.sum()
+    return s, g
+
+
+def l20_rounds(Phi, F, Z, n, until=None):
+    """delta rule, one round = every preset k, every output i: z_ji += g_j(c_k) (f_ki - sum_j g_j(c_k) z_ji)"""
+    for r in range(1, n + 1):
+        em = 0
+        for k in range(6):
+            for i in range(6):
+                er = F[k, i] - Phi[k] @ Z[:, i]; em = max(em, abs(er)); Z[:, i] += Phi[k] * er
+        if until and em < until: return Z, r
+    return Z, n
+
+
+def l20_run(events, seconds=1.0):
+    x, log = render(L20, seconds, events)
+    assert not errors_in(log), errors_in(log)[:3]
+    out = {}
+    for l in log.splitlines():
+        if l.startswith('l20-'):
+            tag, vals = l.split(':', 1); out[tag] = np.array(list(map(float, vals.split())))
+    return x, out
+
+
+def check_l20():
+    res = []
+    # 1) at load (width 0.6, blend): widths, hidden layer and outputs at the cursor = numpy
+    x, o = l20_run([(300, 'l20-print bang')], 0.4)
+    s, g = l20_rbf(L20_C, 0.6)
+    Phi = np.array([g(c) for c in L20_C])
+    gx = g([0.32, 0.4])
+    e = max(abs(o['l20-sigma'] - s).max(), abs(o['l20-g'] - gx).max(), abs(o['l20-p'] - gx @ L20_F).max(), abs(o['l20-z'] - L20_F.ravel()).max())
+    blend = abs(Phi @ L20_F - L20_F).max()
+    assert e < 1e-5 and abs(o['l20-fit'][1] - blend) < 1e-5, (e, o['l20-fit'], blend)
+    res.append(f'widths, normalised hidden layer and outputs = numpy (within {e:.0e}); the blend misses its presets by {blend:.2f}')
+    # 2) 20 rounds of the delta rule = numpy, step for step
+    x, o = l20_run([(300, 'l20-train 20'), (350, 'l20-print bang')], 0.4)
+    Z, _ = l20_rounds(Phi, L20_F, L20_F.copy(), 20)
+    e = abs(o['l20-z'] - Z.ravel()).max()
+    assert e < 1e-4 and abs(o['l20-fit'][1] - abs(Phi @ Z - L20_F).max()) < 1e-4, (e, o['l20-fit'])
+    res.append(f'20 rounds of the delta rule = numpy (within {e:.0e}), error {o["l20-fit"][1]:.4f}')
+    # 3) exact at width 0.6 and 1: converges to the interpolating weights solve(PHI, F); count of rounds as numpy
+    for w in (0.6, 1.0):
+        x, o = l20_run([(200, f'l20-width {w}'), (300, 'l20-exact 1'), (400, 'l20-print bang')], 0.5)
+        s, g = l20_rbf(L20_C, w); Phi_w = np.array([g(c) for c in L20_C])
+        Z, n = l20_rounds(Phi_w, L20_F, L20_F.copy(), 3000, until=1e-4)
+        zs = np.linalg.solve(Phi_w, L20_F)
+        nr, err, wmax = o['l20-fit']
+        assert err < 2e-4 and abs(nr - n) <= max(3, 0.02 * n) and abs(o['l20-z'] - zs.ravel()).max() < 0.01 and abs(wmax - abs(zs).max()) < 0.01, (w, o['l20-fit'], n)
+        res.append(f'exact at width {w:g}: {int(nr)} rounds (numpy {n}), error {err:.0e}, largest weight {wmax:.2f} (solve: {abs(zs).max():.2f})')
+    # 4) narrow bumps (width 0.15): the nearest preset wins - a codebook
+    x, o = l20_run([(200, 'l20-width 0.15'), (300, 'l20-x 0.45'), (310, 'l20-y 0.45'), (400, 'l20-print bang')], 0.5)
+    e = abs(o['l20-p'] - L20_F[4]).max()
+    assert e < 1e-3, (e, o['l20-p'])
+    res.append(f'width 0.15 plays the nearest preset (within {e:.0e}): a codebook')
+    # 5) store: dial a sound at an empty spot, store it as preset 3; the network is rebuilt around it
+    snd = [0.9, 0.6, 0.2, 0.4, 0.1, 0.3]
+    ev = [(200, 'l20-slot 2'), (250, 'l20-x 0.7'), (260, 'l20-y 0.45')] + [(300 + k, f'l20-p{k} {v}') for k, v in enumerate(snd)]
+    x, o = l20_run(ev + [(400, 'l20-store bang'), (500, 'l20-print bang')], 0.6)
+    C2, F2 = L20_C.copy(), L20_F.copy(); C2[2] = [0.7, 0.45]; F2[2] = snd
+    s, g = l20_rbf(C2, 0.6); gx = g([0.7, 0.45])
+    e = max(abs(o['l20-cx'] - C2[:, 0]).max(), abs(o['l20-cy'] - C2[:, 1]).max(), abs(o['l20-f'] - F2.ravel()).max(), abs(o['l20-p'] - gx @ F2).max())
+    assert e < 1e-5, (e, o)
+    res.append('store puts the dialled sound at the cursor as preset 3, the network is rebuilt around it (= numpy)')
+    # 6) it plays, also while walking
+    x, o = l20_run([(100, 'l20-walk 1'), (1900, 'l20-print bang')], 2.0)
+    st = stats(x)
+    assert st['finite'] and st['rms'] > 0.01 and st['peak'] < 1, st
+    res.append(f'walking the pad plays (rms {st["rms"]:.3f}, peak {st["peak"]:.2f})')
+    return '; '.join(res)
+
+
+L21 = 'lessons/21-genetic-algorithms.pd'
+L21_Y0 = (0.5, -0.5, 0.25, -0.25)
+
+
+def l21_run(events, seconds=0.5):
+    x, log = render(L21, seconds, events)
+    assert not errors_in(log), errors_in(log)[:3]
+    rows = lambda tag: [list(map(float, l.split(':', 1)[1].split())) for l in log.splitlines() if l.startswith(tag + ':')]
+    return x, rows
+
+
+def l21_ctrnn(g, k, n, y0=L21_Y0):
+    """the synth: y_i += k (-y_i + sum_j w_ij tanh(y_j) + b_i), genome = 4 rows of (w_i1 .. w_i4, b_i)"""
+    g = np.asarray(g).reshape(4, 5); W, b = g[:, :4], g[:, 4]; y = np.array(y0, float); out = np.empty((n, 4))
+    for t in range(n):
+        y = y + k * (-y + W @ np.tanh(y) + b); out[t] = y
+    return out
+
+
+def l21_children(pop, kids, muts):
+    """replay a breeding from the trace: rows 1..cut from parent A, the rest from B, then the printed mutation steps, clipped"""
+    new = np.full((8, 20), np.nan)
+    for c, a, b, cut in kids:
+        new[int(c)] = np.concatenate([pop[int(a), :5 * int(cut)], pop[int(b), 5 * int(cut):]])
+    for c, gi, mu in muts:
+        lim = 2 if int(gi) % 5 == 4 else 4
+        new[int(c), int(gi)] = np.clip(new[int(c), int(gi)] + mu, -lim, lim)
+    return new
+
+
+def check_l21():
+    res = []
+    # 1) a new start: Beer-style circuits (self-excitation 1..3, w_ji = -w_ij, biases -1..1); the synth = the CTRNN recurrence
+    x, rows = l21_run([(300, 'l21-print bang')])
+    pop = np.array(rows('l21-pop')[-1]).reshape(8, 4, 5)
+    W, b = pop[:, :, :4], pop[:, :, 4]
+    d = np.array([np.diag(w) for w in W]); off = W - np.array([np.diag(np.diag(w)) for w in W])
+    assert np.all((d >= 1) & (d <= 3)) and np.allclose(off, -off.transpose(0, 2, 1)) and np.all(abs(off) <= 3) and np.all(abs(b) <= 1)
+    rec, cur = np.array(rows('l21-rec')[-1]), np.array(rows('l21-cur')[-1])
+    ref = l21_ctrnn(cur, 0.04, len(rec))[:, 0]
+    e = abs(rec - ref).max()
+    assert np.allclose(cur, pop[0].ravel()) and e < 1e-3, e
+    res.append(f'a new start = 8 Beer-style circuits (self-excitation 1..3, w_ji = -w_ij); the [fexpr~] synth = the CTRNN recurrence (within {e:.0e} over 1024 samples)')
+    # 2) every card sings or stays silent as numpy predicts (left channel = 0.25 tanh(y1), 10 Hz highpass)
+    ev = [(400 * k + 50, f'l21-listen {k}') for k in range(8)]
+    x, rows = l21_run(ev, 3.25)
+    agree = 0
+    for k in range(8):
+        seg = x[int((0.4 * k + 0.2) * SR):int((0.4 * k + 0.4) * SR), 0]
+        y = np.tanh(l21_ctrnn(pop[k].ravel(), 0.04, int(0.34 * SR))[int(0.14 * SR):, 0])
+        pd_rms, np_rms = np.sqrt(np.mean((seg - seg.mean()) ** 2)), 0.25 * y.std()
+        agree += (pd_rms > 0.005) == (np_rms > 0.005) and abs(pd_rms - np_rms) < 0.1 * np_rms + 0.003
+    assert agree == 8, agree
+    res.append('all 8 cards sing or stay silent exactly as numpy predicts, at the predicted loudness')
+    # 3) one generation, traced, replayed: elitism, roulette parents, crossover between neurons, Gaussian mutation, clipping
+    R = [3, 0, 1, 0, 0, 2, 0, 0]
+    rate_ev = lambda t, r: [(t + k, f'l21-r{k} {v}') for k, v in enumerate(r)]
+    for elite in (1, 0):
+        x, rows = l21_run([(100, f'l21-elite {elite}'), (110, 'l21-print bang'), (120, 'l21-trace 1')] + rate_ev(130, R) + [(150, 'l21-breed bang'), (200, 'l21-print bang')])
+        p0, p1 = (np.array(r).reshape(8, 20) for r in rows('l21-pop')[-2:])
+        kids, muts = rows('l21-child'), rows('l21-mut')
+        new = l21_children(p0, kids, muts)
+        e = abs(new - p1).max()
+        par = {int(k[1]) for k in kids[elite:]} | {int(k[2]) for k in kids[elite:]}
+        assert len(kids) == 8 and e < 1e-4 and par <= {0, 2, 5} and all(1 <= k[3] <= 3 for k in kids[elite:]), (e, kids)
+        assert not elite or (kids[0][1:] == [0, 0, 4] and np.allclose(p1[0], p0[0])), kids[0]
+    res.append(f'a traced generation replays exactly (within {e:.0e}): card 1 = the best card (elitism), parents only from rated cards, rows from A then B, mutation steps added and clipped')
+    # 4) 40 generations with the same ratings: parents drawn in proportion to the rating, cuts uniform, mutations at rate p and size sigma
+    ev = [(50, 'l21-trace 1')]
+    for g in range(40):
+        ev += rate_ev(100 + 30 * g, R) + [(110 + 30 * g, 'l21-breed bang')]
+    x, rows = l21_run(ev, 1.4)
+    kids = np.array([k for k in rows('l21-child') if k[3] < 4]); muts = np.array(rows('l21-mut'))
+    cnt = np.array([np.sum(kids[:, 1:3] == s) for s in (0, 2, 5)]); exp = cnt.sum() * np.array([3, 1, 2]) / 6
+    chi = ((cnt - exp) ** 2 / exp).sum()
+    cuts = np.bincount(kids[:, 3].astype(int), minlength=4)[1:]
+    rate, size = len(muts) / (40 * 7 * 20), muts[:, 2].std()
+    chic = ((cuts - cuts.mean()) ** 2 / cuts.mean()).sum()
+    assert chi < 13.8 and cnt.sum() == 560 and chic < 13.8 and abs(rate - 0.15) < 0.025 and abs(size - 0.4) < 0.04, (cnt, chi, cuts, rate, size)
+    res.append(f'40 generations: parents {cnt[0]}:{cnt[1]}:{cnt[2]} for ratings 3:1:2 (chi2 {chi:.1f}), cuts {cuts.tolist()}, {rate:.3f} of the genes mutated (p = 0.15) with step sd {size:.2f} (sigma = 0.4)')
+    # 5) no ratings at all: every card can be a parent (equal slices)
+    ev = [(50, 'l21-trace 1')] + [(100 + 20 * g, 'l21-breed bang') for g in range(10)]
+    x, rows = l21_run(ev, 0.4)
+    kids = np.array([k for k in rows('l21-child') if k[3] < 4])
+    assert set(kids[:, 1].astype(int)) | set(kids[:, 2].astype(int)) == set(range(8))
+    res.append('with no ratings every card can be a parent')
+    return '; '.join(res)
+
+
+L22 = 'lessons/22-linear-prediction.pd'
+L22_RHO = np.array([round(0.995 ** k, 6) for k in range(1, 9)])
+
+
+def l22_run(events, seconds):
+    x, log = render(L22, seconds, events)
+    assert not errors_in(log), errors_in(log)[:3]
+    out = {}
+    for l in log.splitlines():
+        if l.startswith('l22-'):
+            tag, vals = l.split(':', 1); out[tag[4:]] = np.array(list(map(float, vals.split())))
+    return x, out
+
+
+def l22_rec(src, mu, learn=1, t=0.6, extra=()):
+    """let the neuron learn for t seconds, record 2048 samples, print"""
+    ev = [(10, f'l22-src {src}'), (20, f'l22-mu {mu}'), (30, f'l22-learn {learn}')] + list(extra) + [(int(t * 1000), 'l22-rec bang'), (int(t * 1000) + 400, 'l22-print bang')]   # 2048 samples at 6 kHz = 341 ms
+    return l22_run(ev, t + 0.45)
+
+
+def check_l22():
+    res = []
+    # 1) the normalised delta rule, replayed sample by sample on a vowel: power k, guess, every weight update
+    x, o = l22_rec(2, 0.1)
+    xs, pm, k, p = o['rx'], o['rm'], o['rn'], o['rp']; W = np.array([o[f'rw{j}'] for j in range(1, 9)]).T
+    n = np.arange(9, len(xs)); U = np.array([xs[i - 8:i][::-1] for i in n])
+    em = abs(pm[n] - (pm[n - 1] + (xs[n - 1] ** 2 - pm[n - 1]) / 120)).max()
+    ek = max(em, abs(k[n] - (1e-6 + np.maximum((U ** 2).sum(1), 8 * pm[n]))).max())
+    ep = abs(p[n] - (W[n - 1] * U).sum(1)).max()
+    wn = np.clip(W[n - 1] + 0.1 * ((xs[n] - p[n]) / k[n])[:, None] * U, -4, 4)
+    ew = abs(W[n] - wn).max()
+    assert ek < 1e-4 and ep < 1e-4 and ew < 1e-4, (ek, ep, ew)   # 6-digit printing limits this
+    res.append(f'2039 samples (at 6 kHz) of a vowel replayed: average power, k, guess and every weight update = the normalised delta rule (within {max(ek, ep, ew):.0e})')
+    # 2) a sine is predicted perfectly; on the vowel the neuron reaches the least-squares predictor (Rojas 9.3.4)
+    gs = l22_rec(0, 0.1)[1]['gain'][0]
+    x, o = l22_rec(2, 0.1, t=1.5)
+    xs, p = o['rx'], o['rp']; n = np.arange(8, len(xs)); U = np.array([xs[i - 8:i][::-1] for i in n])
+    W = np.array([o[f'rw{j}'] for j in range(1, 9)]).T
+    with np.errstate(all='ignore'):   # numpy on macOS (Accelerate) raises spurious matmul warnings
+        a = np.linalg.lstsq(U, xs[n], rcond=None)[0]
+        P, e_ls, e_run, e_fix = np.mean(xs[n] ** 2), np.mean((xs[n] - U @ a) ** 2), np.mean((xs[n] - p[n]) ** 2), np.mean((xs[n] - U @ W[-1]) ** 2)
+    g_run, g_fix, g_ls = (10 * np.log10(P / e) for e in (e_run, e_fix, e_ls))
+    assert gs > 60 and g_ls - g_run < 1 and g_ls - g_fix < 0.5, (gs, g_run, g_fix, g_ls)
+    res.append(f'sine: prediction gain {gs:.0f} dB; vowel: {g_run:.1f} dB while learning, {g_fix:.1f} dB with its weights frozen, least-squares optimum {g_ls:.1f} dB')
+    # 3) stability: mu = 1.9 stays bounded, mu = 2.5 explodes (the weights slam into the clip at 4)
+    st = {}
+    for mu in (1.9, 2.5):
+        x, o = l22_rec(2, mu, t=0.5)
+        W = np.array([o[f'rw{j}'] for j in range(1, 9)]); st[mu] = (abs(W).max(), np.sqrt(np.mean((o['rx'] - o['rp']) ** 2) / np.mean(o['rx'] ** 2)))
+    assert st[1.9][0] < 3.9 and st[1.9][1] < 2 and st[2.5][0] >= 3.99 and st[2.5][1] > 3, st
+    res.append(f'mu 1.9: largest weight {st[1.9][0]:.2f}, error {st[1.9][1]:.1f} x input; mu 2.5: weights at the clip, error {st[2.5][1]:.0f} x input')
+    # 4) frozen weights: the cross-synthesis = the all-pole filter y = tanh(exc + sum rho^k w_k y[n-k]), and the learned spectrum = 1/|A|
+    x, o = l22_rec(2, 0.1, t=1.8, extra=[(1500, 'l22-learn 0')])
+    W = np.array([o[f'rw{j}'] for j in range(1, 9)]).T; w = W[0]
+    q, y = o['rq'], o['rs']; n = np.arange(8, len(y))
+    yn = np.tanh(q[n] + (np.array([y[i - 8:i][::-1] for i in n]) * (L22_RHO * w)).sum(1))
+    ey = abs(y[n] - yn).max()
+    om = 3.14159 * (np.arange(64) + 0.5) / 64; kk = np.arange(1, 9)
+    A2 = (1 - (np.cos(np.outer(om, kk)) * o['w']).sum(1)) ** 2 + ((np.sin(np.outer(om, kk)) * o['w']).sum(1)) ** 2
+    el = abs(o['lpc'] - -10 * np.log10(np.maximum(1e-6, A2))).max()
+    assert abs(W - w).max() == 0 and np.allclose(o['w'], w, atol=1e-6) and ey < 1e-5 and el < 1e-3, (ey, el)
+    peaks = [int(round((m + 0.5) * 3000 / 64)) for m in range(1, 63) if o['lpc'][m] > o['lpc'][m - 1] and o['lpc'][m] > o['lpc'][m + 1]]
+    assert any(abs(f - 730) < 110 for f in peaks) and any(abs(f - 1090) < 160 for f in peaks), peaks
+    res.append(f'frozen weights: cross-synthesis = the all-pole filter (within {ey:.0e}); learned spectrum = 1/|A| (within {el:.0e}), peaks near {peaks} Hz (formants of a: 730 1090 2440)')
+    # 5) reset
+    x, o = l22_run([(10, 'l22-src 2'), (300, 'l22-learn 0'), (310, 'l22-reset bang'), (400, 'l22-print bang')], 0.5)
+    assert abs(o['w']).max() == 0
+    res.append('reset sets all weights to 0')
+    return '; '.join(res)
+
+
 def check_all_load():
     """every help patch (so every abstraction, with arguments), the start page and all lessons load and run without a single error"""
     pats = sorted(os.path.join(PKG, f) for f in os.listdir(PKG) if f.endswith('-help.pd') or f in ('00-START-HERE.pd', 'neuralplay-meta.pd'))
@@ -962,6 +1360,11 @@ CHECKS = [('everything loads', check_all_load), ('nn.act~ formulas', check_act),
           ('lesson 15 diffusion', check_l15),
           ('lesson 16 feedback reservoir', check_l16),
           ('lesson 17 Q-learning', check_l17),
+          ('lesson 18 self-organizing map', check_l18),
+          ('lesson 19 Hopfield-Tank + annealing', check_l19),
+          ('lesson 20 RBF preset morphing', check_l20),
+          ('lesson 21 genetic algorithm', check_l21),
+          ('lesson 22 linear prediction', check_l22),
           ('examples / exercises / templates run', check_smoke),
           ('exercise self-checks', check_exercises),
           ('gesture-gan: presets and VAE sampling', check_vg_presets),

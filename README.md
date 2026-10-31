@@ -3,9 +3,9 @@
 **neuralplay — a neural network playground for Pure Data**
 by **Moisés Horta Valenzuela / SEMILLA.AI Studio**
 
-Build, hear and understand neural networks inside Pd — from the 1943 logic neuron to VAEs,
-GANs, transformers, diffusion and reinforcement learning — and wire them into circuits that control
-synthesis and feedback systems. Seventeen commented lessons, a small library of neuron objects, examples and
+Build, hear and understand neural networks inside Pd — from the 1943 logic neuron to self-organizing
+maps, genetic algorithms, VAEs, GANs, transformers, diffusion and reinforcement learning — and wire them
+into circuits that control synthesis and feedback systems. Twenty-two commented lessons, a small library of neuron objects, examples and
 self-checking exercises, written for music technology students.
 Vanilla **Pd 0.54 or newer**, no externals.
 
@@ -26,6 +26,7 @@ Vanilla **Pd 0.54 or newer**, no externals.
 | III · Modern generative models | 11 autoencoder / VAE · 12 GAN · 13 attention · 14 transformer induction head · 15 diffusion |
 | IV · Circuits | 16 the neural feedback synth (a 27-neuron reservoir) |
 | V · Learning from reward | 17 reinforcement learning: Q-learning, a melody that learns from reward |
+| VI · Other ways to learn (after Rojas 1996) | 18 self-organizing map · 19 Hopfield–Tank networks and simulated annealing · 20 radial basis functions (preset morphing) · 21 genetic algorithms (breed synths by ear) · 22 linear prediction (LPC) |
 
 Plus examples (a ring-oscillator drone, a spiking drum machine, the GAN gesture space: FM
 gestures and granular clouds on your own sound, learned by a GAN whose latent space you walk, and the
@@ -39,7 +40,7 @@ button, and the `nn.*` library (`[nn.neuron~]`, `[nn.act~]`, `[nn.izh~]`, `[nn.d
 neuralplay/              the Pd package - this folder is what deken ships
   00-START-HERE.pd       start page: lessons, library, history, examples/exercises browser
   nn.*.pd                the library, each with an nn.*-help.pd
-  lessons/               the 17 lessons (data/ holds the trained VAE weights)
+  lessons/               the 22 lessons (data/ holds the trained VAE weights)
   examples/              finished instruments - listed on the start page automatically
   exercises/             tasks with a self-check - listed on the start page automatically
   templates/             lesson-template.pd: copy it to start a new patch
@@ -55,7 +56,7 @@ CONTRIBUTING.md          conventions, how to add lessons/examples/exercises/obje
 ## Tests
 
 ```sh
-python3 dev/check.py                 # every check, about 10 seconds (needs Pd and numpy)
+python3 dev/check.py                 # every check, about 30 seconds (needs Pd and numpy)
 python3 dev/check.py "lesson 04"     # only the checks whose name contains the text
 PD=/usr/bin/pd python3 dev/check.py  # Pd somewhere else than the macOS default
 ```
